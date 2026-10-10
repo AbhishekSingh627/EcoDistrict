@@ -30,10 +30,10 @@ EcoDistrict helps communities improve waste segregation, increase recycling rate
 
 | Feature | Description |
 |---------|-------------|
-| **Waste Image Classifier** | Upload a photo of waste → the locally-running TFLite model classifies it into one of 10 categories with confidence score and top-3 predictions. No external API is called. |
+| **Waste Image Classifier** | Upload a photo of waste → `POST /api/ai/scan` runs Google Gemini as the primary classifier with the locally-running TFLite model as an automatic fallback. Returns a 10-class category, confidence score, top-3 predictions, and a `primary_source` field indicating which classifier was used. |
 | **Waste Map — Registered tab** | Leaflet/OpenStreetMap map centred on Ahmedabad. Displays real disposal/recycling locations stored in the SQLite database (`GET /api/locations/`). |
 | **Waste Map — Find Nearby tab** | Uses browser geolocation to search for real nearby waste-management facilities. Primary provider: Google Places JS API (if key is configured). Automatic fallback: OpenStreetMap/Overpass data via the backend proxy. The map works fully without any API key. |
-| **Waste Map — Demo tab** | Fixed set of sample locations (clearly labelled as fake demo data) for UI testing. |
+| **Waste Map — Sample Locations tab** | Fixed set of illustrative sample locations (clearly labelled as preview data, not real Ahmedabad facilities) for UI demonstration. |
 | **District Dashboard** | Administrative overview with waste-total, category-breakdown, and collection-trend charts. Currently uses clearly-labelled sample data; will pull from live analytics endpoints in Phase 2. |
 | **My Impact** | Personal sustainability dashboard with bar and pie charts. Currently uses clearly-labelled sample data; will pull from `GET /api/waste/records` in Phase 2. |
 | **Gemini Dataset Curator** | `POST /api/ai/verify-image` — sends an image to Google Gemini and returns a structured JSON verdict on whether it is a suitable training candidate for the waste classifier. This is a **human-review assistant only** and does not affect the TFLite classifier. Requires `GEMINI_API_KEY`. |
@@ -97,8 +97,8 @@ EcoDistrict/
 │       ├── App.jsx                   # Routes: / /scan /map /impact /district
 │       ├── pages/
 │       │   ├── Home.jsx
-│       │   ├── ScanWaste.jsx         # Image upload → POST /api/ai/classify
-│       │   ├── WasteMap.jsx          # 3-tab map: Registered / Demo / Find Nearby
+│       │   ├── ScanWaste.jsx         # Image upload → POST /api/ai/scan
+│       │   ├── WasteMap.jsx          # 3-tab map: Registered / Sample Locations / Find Nearby
 │       │   ├── MyImpact.jsx          # Personal charts (sample data, Phase 1)
 │       │   └── DistrictDashboard.jsx # District charts (sample data, Phase 1)
 │       ├── components/
@@ -110,7 +110,7 @@ EcoDistrict/
 │       ├── hooks/
 │       │   └── useNearbyFacilities.js # Google → OSM fallback hook
 │       └── data/
-│           └── sampleLocations.js    # Demo tab data (fake Delhi coords, labelled)
+│           └── sampleLocations.js    # Sample Locations tab data (illustrative Delhi coords, labelled)
 │
 ├── backend/
 │   ├── .env.example                  # Copy to .env — documents GEMINI_API_KEY
@@ -119,7 +119,7 @@ EcoDistrict/
 │   ├── models.py                     # ORM models: User, WasteCategory, WasteRecord, Location
 │   ├── requirements.txt
 │   ├── routes/
-│   │   ├── ai.py                     # POST /api/ai/classify  (TFLite inference)
+│   │   ├── ai.py                     # POST /api/ai/scan (Gemini+TFLite), POST /api/ai/classify (TFLite-only)
 │   │   ├── verify.py                 # POST /api/ai/verify-image  (Gemini curation)
 │   │   ├── nearby.py                 # GET  /api/nearby  (Overpass proxy)
 │   │   ├── locations.py              # GET/POST /api/locations/
@@ -134,7 +134,8 @@ EcoDistrict/
 │   │       ├── class_names.json      # 10 classifier class labels (committed)
 │   │       └── *.tflite              # Model weights — gitignored, not committed
 │   └── tests/
-│       └── test_nearby.py            # 28 unit tests for the Overpass proxy
+│       ├── test_nearby.py            # 38 unit tests for the Overpass proxy
+│       └── test_scan.py              # 26 unit tests for POST /api/ai/scan
 │
 ├── ml/                               # ML pipeline scripts (training, evaluation)
 ├── data/
@@ -151,13 +152,14 @@ EcoDistrict/
 - **Node.js 18 or later** (for the frontend)
 - **pip** and **venv** (standard with Python)
 
-The TFLite model file (`*.tflite`) is **not committed to the repository** because of its size (~8.5 MB). You must obtain it separately and place it at:
+The TFLite model file (`*.tflite`) is **not committed to the repository** because of its size (~8.5 MB).
+A hosted download link will be published with the project release. Until then, contact the project maintainer to obtain the file and place it at:
 
 ```
 backend/ml/models/ecodistrict_garbage_10class_v1.tflite
 ```
 
-The backend will fail to start if this file is missing and the `ai.py` route is loaded.
+The backend will fail to start if this file is missing — `routes/ai.py` loads and allocates the interpreter at startup.
 
 ---
 
@@ -270,12 +272,45 @@ http://127.0.0.1:8000/api/docs
 | GET | `/api/locations/{id}` | Retrieve one location | ✅ Live |
 | GET | `/api/analytics/summary` | District summary statistics | ⚠️ Placeholder |
 | GET | `/api/analytics/monthly` | Monthly waste trend | ⚠️ Placeholder |
-| POST | `/api/ai/classify` | Classify a waste image (local TFLite model) | ✅ Live |
+| POST | `/api/ai/scan` | **Primary scanner** — Gemini + TFLite combined; used by `ScanWaste.jsx` | ✅ Live |
+| POST | `/api/ai/classify` | TFLite-only classifier (internal / legacy; not used by the frontend) | ✅ Live |
 | GET | `/api/ai/categories` | List classifier categories and model name | ✅ Live |
 | POST | `/api/ai/verify-image` | Dataset-curation verdict via Gemini | ✅ Live (needs `GEMINI_API_KEY`) |
 | GET | `/api/nearby` | Proxy Overpass QL query for nearby facilities | ✅ Live |
 
-### `POST /api/ai/classify` — example response
+### `POST /api/ai/scan` — example response
+
+`POST /api/ai/scan` is the endpoint called by the frontend scanner. It runs the TFLite model and, when `GEMINI_API_KEY` is set, also calls Gemini as a primary classifier. The `primary_source` field tells the frontend which result to display.
+
+```json
+{
+  "status": "success",
+  "filename": "bottle.jpg",
+  "model_category": "plastic",
+  "model_confidence": 94.31,
+  "top_predictions": [
+    { "category": "plastic",   "confidence": 94.31 },
+    { "category": "glass",     "confidence":  3.12 },
+    { "category": "cardboard", "confidence":  1.44 }
+  ],
+  "model": "ecodistrict_garbage_10class_v1",
+  "primary_source": "gemini",
+  "gemini": {
+    "is_waste": true,
+    "category": "plastic",
+    "confidence": "high",
+    "agrees_with_model": true,
+    "reason": "Clear image of a plastic bottle."
+  },
+  "gemini_error": null
+}
+```
+
+When Gemini is absent or fails, `primary_source` is `"model"`, `gemini` is `null`, and `gemini_error` explains why (e.g. `"not_configured"`, `"rate_limited"`, `"timeout"`).
+
+### `POST /api/ai/classify` — TFLite-only response
+
+`POST /api/ai/classify` runs only the local TFLite model (no Gemini call). It is retained as an internal endpoint.
 
 ```json
 {
@@ -330,10 +365,10 @@ The model file is **not stored in this repository** (it is listed in `.gitignore
 ```bash
 cd backend
 source venv/bin/activate
-pytest tests/test_nearby.py -v
+pytest tests/ -v
 ```
 
-Expected result: **28 passed** (tests cover the Overpass proxy — validation, query construction, caching, fallback, timeout, and User-Agent header behaviour).
+Expected result: **64 passed** — 38 tests in `test_nearby.py` (Overpass proxy: validation, query construction, caching, fallback, timeout, User-Agent) and 26 tests in `test_scan.py` (combined scan endpoint: Gemini primary/fallback, error codes, size guard, TFLite-only path).
 
 Frontend lint:
 
@@ -351,7 +386,7 @@ cd frontend
 npm run build
 ```
 
-Expected: clean build. Vite emits a bundle-size advisory (887 kB uncompressed / 264 kB gzipped) because Recharts and Leaflet are bundled together in one chunk — this is a performance note, not an error.
+Expected: clean build. Vite emits a bundle-size advisory because Recharts and Leaflet are bundled together in a single chunk — this is a performance note, not an error. Code-splitting can reduce the bundle size in a future optimisation pass.
 
 ---
 
@@ -361,7 +396,7 @@ Expected: clean build. Vite emits a bundle-size advisory (887 kB uncompressed / 
 |------|--------|
 | Authentication | No auth is implemented. All API endpoints are public. `POST /api/waste/records` uses a hardcoded `user_id=0`. |
 | Analytics | `/api/analytics/summary` and `/monthly` return placeholder zeros, not real aggregations. |
-| Classifier UI coverage | `ScanWaste.jsx` has detailed disposal guidance for 6 of the 10 model classes. The remaining 4 (`battery`, `biological`, `clothes`, `shoes`) fall back to a generic result message. |
+| Classifier UI coverage | `ScanWaste.jsx` provides specific disposal guidance (`label`, `disposal_type`, `explanation`) for all 10 model output classes. An additional generic fallback is used only for any unexpected category string outside the known 10. |
 | OSM data quality | Waste/recycling facilities in many Indian cities have sparse or unnamed entries in OpenStreetMap. The Find Nearby feature may return zero results in areas with low OSM coverage even when facilities exist. |
 | Single-worker cache | The `GET /api/nearby` in-process cache works correctly in development (single Uvicorn worker). In a multi-worker production deployment, each worker has its own cache; use Redis or a shared cache layer if consistency matters. |
 | SQLite in production | SQLite is suitable for development and low-traffic single-server deployments. Switch `DATABASE_URL` in `.env` to a PostgreSQL or MySQL URL for production. |

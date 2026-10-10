@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { Upload, Camera, X, CheckCircle, Loader, AlertCircle, AlertTriangle, MapPin } from 'lucide-react'
 
 // ── Disposal guidance per waste category ──────────────────────────────────────
-// 6 of 10 model classes have specific guidance; the other 4 use the generic fallback.
+// All 10 model output classes have specific guidance below.
+// GENERIC_CATEGORY_INFO is used only for unexpected category strings outside the known 10.
 const CATEGORY_INFO = {
   battery: {
     label: 'Battery',
