@@ -2,6 +2,9 @@
 routes/ai.py — EcoDistrict waste image classification endpoint.
 
 Uses the trained EcoDistrict 10-class garbage TFLite model through LiteRT.
+The model file is not committed to the repository; see README §ML Model for
+how to obtain it.  If the file is absent the backend starts normally and
+endpoints that require TFLite return HTTP 503 instead of crashing.
 """
 
 from pathlib import Path
@@ -54,12 +57,27 @@ except Exception:
     ]
 
 
-# Load model once when the API starts
-interpreter = Interpreter(model_path=str(MODEL_PATH))
-interpreter.allocate_tensors()
+# Load model once when the API starts.
+# If the .tflite file is missing or corrupt the backend still starts;
+# interpreter is set to None and _MODEL_LOAD_ERROR records why.
+interpreter = None
+INPUT_DETAILS = None
+OUTPUT_DETAILS = None
+_MODEL_LOAD_ERROR: str | None = None
 
-INPUT_DETAILS = interpreter.get_input_details()
-OUTPUT_DETAILS = interpreter.get_output_details()
+try:
+    interpreter = Interpreter(model_path=str(MODEL_PATH))
+    interpreter.allocate_tensors()
+    INPUT_DETAILS = interpreter.get_input_details()
+    OUTPUT_DETAILS = interpreter.get_output_details()
+except Exception as _exc:
+    _MODEL_LOAD_ERROR = str(_exc)
+    logger.warning(
+        "TFLite model could not be loaded — local classifier is unavailable. "
+        "Place the model at %s to enable it. Error: %s",
+        MODEL_PATH,
+        _exc,
+    )
 
 
 # -------------------------------------------------------------------
@@ -70,7 +88,17 @@ OUTPUT_DETAILS = interpreter.get_output_details()
 async def classify_waste(file: UploadFile = File(...)):
     """
     Classify an uploaded waste image using the trained EcoDistrict model.
+    Returns HTTP 503 if the TFLite model file is not available.
     """
+
+    if interpreter is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Local TFLite classifier is not available — model file missing. "
+                "Use POST /api/ai/scan for Gemini-based classification."
+            ),
+        )
 
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
@@ -165,11 +193,15 @@ _MAX_GEMINI_SIZE_BYTES  = 10 * 1024 * 1024   # 10 MB — Gemini inline data limi
 async def scan_and_verify(file: UploadFile = File(...)):
     """
     Classify a waste image.  Gemini is the primary classifier when available;
-    the local TFLite model is always run as a fallback and for training data.
+    the local TFLite model runs as a fallback and for training data when present.
 
     primary_source in the response tells the frontend which category to show:
       "gemini" — Gemini succeeded and returned a valid waste category.
       "model"  — Gemini was absent, failed, or said not-waste; use model_category.
+
+    When the TFLite model file is missing:
+      - Gemini (if configured) is tried first and can still return a full result.
+      - If Gemini also fails or is absent, HTTP 503 is returned.
 
     The API key is never returned to the frontend.
     Preprocessing: raw float32 pixel values 0-255 (no normalisation).
@@ -188,33 +220,43 @@ async def scan_and_verify(file: UploadFile = File(...)):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not read uploaded file: {exc}")
 
-    # ── TFLite inference ───────────────────────────────────────────────────────
-    try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        image = image.resize(IMAGE_SIZE)
-        image_array = np.expand_dims(np.asarray(image, dtype=np.float32), axis=0)
+    # ── TFLite inference (skipped gracefully when model is unavailable) ────────
+    model_category: str | None = None
+    model_confidence: float | None = None
+    top_predictions: list = []
+    tflite_error: str | None = None
 
-        interpreter.set_tensor(INPUT_DETAILS[0]["index"], image_array)
-        interpreter.invoke()
-        predictions = interpreter.get_tensor(OUTPUT_DETAILS[0]["index"])[0]
+    if interpreter is None:
+        # Model file was missing at startup — record why but do not crash.
+        tflite_error = "model_unavailable"
+        logger.debug("TFLite skipped: %s", _MODEL_LOAD_ERROR)
+    else:
+        try:
+            image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            image = image.resize(IMAGE_SIZE)
+            image_array = np.expand_dims(np.asarray(image, dtype=np.float32), axis=0)
 
-        predicted_index = int(np.argmax(predictions))
-        confidence = float(predictions[predicted_index])
-        model_category = CLASS_NAMES[predicted_index]
+            interpreter.set_tensor(INPUT_DETAILS[0]["index"], image_array)
+            interpreter.invoke()
+            predictions = interpreter.get_tensor(OUTPUT_DETAILS[0]["index"])[0]
 
-        top_indices = np.argsort(predictions)[::-1][:3]
-        top_predictions = [
-            {
-                "category": CLASS_NAMES[int(i)],
-                "confidence": round(float(predictions[i]) * 100, 2),
-            }
-            for i in top_indices
-        ]
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Image classification failed: {exc}",
-        )
+            predicted_index = int(np.argmax(predictions))
+            model_confidence = float(predictions[predicted_index])
+            model_category = CLASS_NAMES[predicted_index]
+
+            top_indices = np.argsort(predictions)[::-1][:3]
+            top_predictions = [
+                {
+                    "category": CLASS_NAMES[int(i)],
+                    "confidence": round(float(predictions[i]) * 100, 2),
+                }
+                for i in top_indices
+            ]
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Image classification failed: {exc}",
+            )
 
     # ── Gemini classification (primary — falls back to TFLite on any failure) ─
     gemini_result: GeminiVerification | None = None
@@ -227,7 +269,12 @@ async def scan_and_verify(file: UploadFile = File(...)):
     else:
         try:
             raw = verify_image(image_bytes, file.content_type or "image/jpeg")
-            agrees = (raw.category is not None and raw.category == model_category)
+            # agrees_with_model is meaningful only when TFLite also ran
+            agrees = (
+                raw.category is not None
+                and model_category is not None
+                and raw.category == model_category
+            )
             gemini_result = GeminiVerification(
                 is_waste=raw.is_waste,
                 category=raw.category,
@@ -258,11 +305,31 @@ async def scan_and_verify(file: UploadFile = File(...)):
             gemini_error = "unexpected_error"
             logger.warning("Gemini unexpected error: %s", exc)
 
+    # ── Resolve final model_category for the response ─────────────────────────
+    # CombinedScanResponse.model_category is a required str field.
+    # When TFLite is unavailable, use the Gemini category if it succeeded,
+    # otherwise we cannot produce a valid result — return 503.
+    if model_category is None:
+        if gemini_result is not None and gemini_result.category is not None:
+            # Gemini succeeded; use its category as the model_category stand-in.
+            model_category = gemini_result.category
+            model_confidence = 0.0   # no TFLite confidence to report
+        else:
+            # Neither TFLite nor Gemini produced a usable result.
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Local TFLite classifier is not available and Gemini classification "
+                    "did not return a result. Place the TFLite model file at "
+                    f"{MODEL_PATH.relative_to(BASE_DIR)} to enable offline classification."
+                ),
+            )
+
     return CombinedScanResponse(
         status="success",
         filename=file.filename,
         model_category=model_category,
-        model_confidence=round(confidence * 100, 2),
+        model_confidence=round(model_confidence * 100, 2),
         top_predictions=top_predictions,
         model="ecodistrict_garbage_10class_v1",
         primary_source=primary_source,

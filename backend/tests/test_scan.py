@@ -372,3 +372,86 @@ class TestTFLiteError:
         )
         assert r.status_code == 500
         assert "classification failed" in r.json()["detail"].lower()
+
+
+# ── Missing TFLite model ───────────────────────────────────────────────────────
+
+class TestMissingTFLiteModel:
+    """
+    Simulate the backend starting without the .tflite model file.
+    Achieved by patching routes.ai.interpreter to None at the point where
+    scan_and_verify and classify_waste check it.
+    """
+
+    def test_classify_returns_503_when_model_missing(self):
+        """/classify must return 503, not crash, when interpreter is None."""
+        with patch("routes.ai.interpreter", None):
+            r = client.post(
+                "/api/ai/classify",
+                files={"file": ("test.png", _make_png_bytes(), "image/png")},
+            )
+        assert r.status_code == 503
+        assert "not available" in r.json()["detail"].lower()
+
+    def test_scan_503_when_model_missing_and_gemini_absent(self):
+        """When TFLite is missing AND Gemini is not configured → 503."""
+        with patch("routes.ai.interpreter", None), \
+             patch("routes.ai.verify_image", side_effect=EnvironmentError("no key")):
+            r = _post_scan(_make_png_bytes())
+        assert r.status_code == 503
+        assert "not available" in r.json()["detail"].lower()
+
+    def test_scan_200_when_model_missing_but_gemini_succeeds(self):
+        """When TFLite is missing but Gemini returns a valid result → 200."""
+        gemini_mock = _make_gemini_response(category="glass", reason="Glass jar.")
+        with patch("routes.ai.interpreter", None), \
+             patch("routes.ai.verify_image", return_value=gemini_mock):
+            r = _post_scan(_make_png_bytes())
+        body = r.json()
+        assert r.status_code == 200
+        assert body["primary_source"] == "gemini"
+        assert body["model_category"] == "glass"
+        assert body["gemini"]["category"] == "glass"
+
+    def test_scan_model_confidence_zero_when_tflite_missing(self):
+        """model_confidence should be 0.0 when TFLite did not run."""
+        gemini_mock = _make_gemini_response(category="plastic")
+        with patch("routes.ai.interpreter", None), \
+             patch("routes.ai.verify_image", return_value=gemini_mock):
+            r = _post_scan(_make_png_bytes())
+        assert r.status_code == 200
+        assert r.json()["model_confidence"] == 0.0
+
+    def test_scan_top_predictions_empty_when_tflite_missing(self):
+        """top_predictions list should be empty when TFLite did not run."""
+        gemini_mock = _make_gemini_response(category="metal")
+        with patch("routes.ai.interpreter", None), \
+             patch("routes.ai.verify_image", return_value=gemini_mock):
+            r = _post_scan(_make_png_bytes())
+        assert r.status_code == 200
+        assert r.json()["top_predictions"] == []
+
+    def test_scan_503_when_model_missing_and_gemini_fails(self):
+        """When TFLite is missing AND Gemini throws a RuntimeError → 503."""
+        with patch("routes.ai.interpreter", None), \
+             patch("routes.ai.verify_image", side_effect=RuntimeError("api error")):
+            r = _post_scan(_make_png_bytes())
+        assert r.status_code == 503
+
+    def test_scan_503_when_model_missing_and_gemini_returns_not_waste(self):
+        """When TFLite is missing AND Gemini says is_waste=False → 503
+        (no usable category from either source)."""
+        gemini_mock = _make_gemini_response(is_waste=False, category=None, reason="Not waste.")
+        with patch("routes.ai.interpreter", None), \
+             patch("routes.ai.verify_image", return_value=gemini_mock):
+            r = _post_scan(_make_png_bytes())
+        assert r.status_code == 503
+
+    def test_content_type_check_still_works_when_model_missing(self):
+        """Input validation (400 for non-image) must fire before the 503 guard."""
+        with patch("routes.ai.interpreter", None):
+            r = client.post(
+                "/api/ai/scan",
+                files={"file": ("test.txt", b"hello", "text/plain")},
+            )
+        assert r.status_code == 400
