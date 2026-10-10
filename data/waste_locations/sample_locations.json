@@ -9,7 +9,7 @@
       "latitude": 28.6139,
       "longitude": 77.2090,
       "accepted_waste": ["Plastic", "Paper", "Glass", "Metal"],
-      "address": "Near central market — DEMO location, not verified"
+      "address": "Near central market — Sample location — not verified"
     },
     {
       "id": 2,
@@ -18,7 +18,7 @@
       "latitude": 28.6200,
       "longitude": 77.2250,
       "accepted_waste": ["Mixed Waste", "Bulk Items"],
-      "address": "Industrial zone east — DEMO location, not verified"
+      "address": "Industrial zone east — Sample location — not verified"
     },
     {
       "id": 3,
@@ -27,7 +27,7 @@
       "latitude": 28.6080,
       "longitude": 77.2050,
       "accepted_waste": ["Organic", "Food Waste", "Garden Waste"],
-      "address": "Park entrance — DEMO location, not verified"
+      "address": "Park entrance — Sample location — not verified"
     },
     {
       "id": 4,
@@ -36,7 +36,7 @@
       "latitude": 28.6165,
       "longitude": 77.2120,
       "accepted_waste": ["Batteries", "Electronics", "Cables", "Bulbs"],
-      "address": "Near electronics market — DEMO location, not verified"
+      "address": "Near electronics market — Sample location — not verified"
     },
     {
       "id": 5,
@@ -45,7 +45,7 @@
       "latitude": 28.6250,
       "longitude": 77.2080,
       "accepted_waste": ["Plastic", "Paper", "Mixed Recyclables"],
-      "address": "North residential block — DEMO location, not verified"
+      "address": "North residential block — Sample location — not verified"
     }
   ]
 }
