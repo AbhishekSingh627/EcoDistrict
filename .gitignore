@@ -1,0 +1,61 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# ── Environment files (NEVER commit secrets) ──────────────────────────────────
+# Catch .env files at any depth; explicitly allow .env.example templates.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+# Belt-and-suspenders: named paths for the two subdirectories that carry keys
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# ── SQLite databases ──────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ── ML artefacts ──────────────────────────────────────────────────────────────
+ml/models/*.h5
+ml/models/*.pt
+ml/models/*.pkl
+ml/models/*.tflite
+ml/dataset/train/
+ml/dataset/val/
+ml/dataset/test/
+backend/ml/models/*.tflite
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/

@@ -1,0 +1,11 @@
+{
+  "_note": "Sample waste records for development and testing — NOT real user data.",
+  "waste_records": [
+    { "id": 1, "waste_category": "Plastic",  "quantity": 0.8, "unit": "kg", "disposal_method": "Dry Recycling",    "date": "2025-06-18" },
+    { "id": 2, "waste_category": "Organic",  "quantity": 1.2, "unit": "kg", "disposal_method": "Composting",       "date": "2025-06-15" },
+    { "id": 3, "waste_category": "Paper",    "quantity": 2.1, "unit": "kg", "disposal_method": "Paper Recycling",  "date": "2025-06-12" },
+    { "id": 4, "waste_category": "E-waste",  "quantity": 0.5, "unit": "kg", "disposal_method": "E-Waste Centre",   "date": "2025-06-10" },
+    { "id": 5, "waste_category": "Metal",    "quantity": 0.9, "unit": "kg", "disposal_method": "Dry Recycling",    "date": "2025-06-07" },
+    { "id": 6, "waste_category": "Glass",    "quantity": 0.4, "unit": "kg", "disposal_method": "Glass Recycling",  "date": "2025-06-05" }
+  ]
+}

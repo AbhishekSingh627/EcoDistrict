@@ -1,0 +1,51 @@
+{
+  "_note": "Sample waste disposal locations — NOT verified real infrastructure. For development only.",
+  "_source": "Manually created demo data. Real locations will be sourced from OpenStreetMap or local authority data in Phase 2.",
+  "locations": [
+    {
+      "id": 1,
+      "name": "Central Recycling Hub",
+      "type": "Recycling Point",
+      "latitude": 28.6139,
+      "longitude": 77.2090,
+      "accepted_waste": ["Plastic", "Paper", "Glass", "Metal"],
+      "address": "Near central market — DEMO location, not verified"
+    },
+    {
+      "id": 2,
+      "name": "East District Waste Depot",
+      "type": "Waste Disposal",
+      "latitude": 28.6200,
+      "longitude": 77.2250,
+      "accepted_waste": ["Mixed Waste", "Bulk Items"],
+      "address": "Industrial zone east — DEMO location, not verified"
+    },
+    {
+      "id": 3,
+      "name": "Green Park Organic Bin",
+      "type": "Organic Waste",
+      "latitude": 28.6080,
+      "longitude": 77.2050,
+      "accepted_waste": ["Organic", "Food Waste", "Garden Waste"],
+      "address": "Park entrance — DEMO location, not verified"
+    },
+    {
+      "id": 4,
+      "name": "TechRecycle E-Waste Point",
+      "type": "E-Waste",
+      "latitude": 28.6165,
+      "longitude": 77.2120,
+      "accepted_waste": ["Batteries", "Electronics", "Cables", "Bulbs"],
+      "address": "Near electronics market — DEMO location, not verified"
+    },
+    {
+      "id": 5,
+      "name": "North Sector Collection Point",
+      "type": "Collection Point",
+      "latitude": 28.6250,
+      "longitude": 77.2080,
+      "accepted_waste": ["Plastic", "Paper", "Mixed Recyclables"],
+      "address": "North residential block — DEMO location, not verified"
+    }
+  ]
+}
