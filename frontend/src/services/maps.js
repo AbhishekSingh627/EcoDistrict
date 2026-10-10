@@ -52,6 +52,7 @@
  *  googleKeyword — free-text keyword to widen the Google match
  *  osmTags       — Overpass tag conditions (OR-joined within each entry)
  */
+import { apiUrl } from './api'
 export const FACILITY_SEARCHES = [
   {
     label: 'Recycling Centre',
@@ -299,7 +300,9 @@ function classifyOsmElement(tags) {
 export async function searchNearbyFacilitiesOSM(lat, lng, radiusMetres = 5000) {
   console.debug('[EcoDistrict OSM] Requesting via backend proxy, radius:', radiusMetres, 'm, centre:', lat, lng)
 
-  const url = `/api/nearby?lat=${lat}&lng=${lng}&radius=${radiusMetres}`
+  const url = apiUrl(
+  `/api/nearby?lat=${lat}&lng=${lng}&radius=${radiusMetres}`
+)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 30_000)   // hard browser-side safety net
 
