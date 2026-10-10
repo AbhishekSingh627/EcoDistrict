@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api'
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Upload, Camera, X, CheckCircle, Loader, AlertCircle, AlertTriangle, MapPin } from 'lucide-react'
@@ -214,7 +215,7 @@ export default function ScanWaste() {
       const formData = new FormData()
       formData.append('file', image.file)
 
-      const response = await fetch('/api/ai/scan', {
+      const response = await fetch(apiUrl('/api/ai/scan'), {
         method: 'POST',
         body: formData,
       })

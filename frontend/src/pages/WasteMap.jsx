@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api'
 // WasteMap page — OpenStreetMap map with three views:
 //   Registered   — real locations from the backend database (live)
 //   Sample        — static reference locations for UI preview (clearly labelled)
@@ -104,7 +105,7 @@ export default function WasteMap() {
   useEffect(() => {
     if (regStatus !== 'loading') return
     const controller = new AbortController()
-    fetch('/api/locations/', { signal: controller.signal })
+    fetch(apiUrl('/api/locations/'), { signal: controller.signal })
       .then(r => {
         if (!r.ok) throw new Error(`Server responded ${r.status}`)
         return r.json()

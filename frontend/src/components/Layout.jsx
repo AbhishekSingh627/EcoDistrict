@@ -1,6 +1,7 @@
 // Sidebar navigation and topbar for the EcoDistrict dashboard layout.
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { apiUrl } from '../services/api'
 import {
   Home,
   ScanLine,
@@ -26,7 +27,7 @@ export default function Layout() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/health')
+    fetch(apiUrl('/api/health'))
       .then(r => { if (!cancelled) setApiStatus(r.ok ? 'ok' : 'error') })
       .catch(() => { if (!cancelled) setApiStatus('error') })
     return () => { cancelled = true }
